@@ -38,3 +38,5 @@ class WebCrawler(object):
         self.m_homepage = CWebsite(oddschecker_home, oddschecker_home, name="oddschecker_home")
 
     def run(self):
+
+print('test')
