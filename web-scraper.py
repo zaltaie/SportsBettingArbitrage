@@ -2,21 +2,21 @@ import numpy as np
 from fractions import Fraction
 
 from webscraping.website import CWebsite
-from util.message import message
-import util.utilities as ut
+from message import message
+import util as ut
 from templates.HTML_template_elements import make_html
 
-default_link_name = 'href'
-oddschecker_home = 'https://www.oddschecker.com/'
+DEFAULT_LINK_NAME = 'href'
+ODDSCHECKER_HOME = 'https://www.oddschecker.com/'
 
-bet_amount = input('Insert your bet amount: ')
+BET_AMOUNT = input('Insert your bet amount: ')
 
-inplay = False
-min_opp = 1.05
-max_opp = 1.25
+INPLAY = False
+MIN_OPP = 1.05
+MAX_OPP = 1.25
 
 '''
-ignore = [
+IGNORE = [
     "Half Time Winning Margin",
     "To Score 2 Or More Goals",
     "To Score A Hat-Trick.",
@@ -38,7 +38,3 @@ class WebCrawler(object):
         self.m_homepage = CWebsite(oddschecker_home, oddschecker_home, name="oddschecker_home")
 
     def run(self):
-
-print('test')
-
-print('testing 2')
