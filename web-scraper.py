@@ -35,6 +35,6 @@ class WebCrawler(object):
     def __init__(self, name="Oddschecker WebCrawler"):
         self.m_name = name
         self.all_result = []
-        self.m_homepage = CWebsite(oddschecker_home, oddschecker_home, name="oddschecker_home")
+        self.m_homepage = CWebsite(ODDSCHECKER_HOME, ODDSCHECKER_HOME, name="oddschecker_home")
 
     def run(self):
