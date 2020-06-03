@@ -1,10 +1,10 @@
 import numpy as np
 from fractions import Fraction
 
-from webscraping.website import CWebsite
+from oddschecker import CWebsite
 from message import message
 import util as ut
-from templates.HTML_template_elements import make_html
+#from templates.HTML_template_elements import make_html
 
 DEFAULT_LINK_NAME = 'href'
 ODDSCHECKER_HOME = 'https://www.oddschecker.com/'
@@ -25,7 +25,7 @@ IGNORE = [
     "To Score 4+ Goals",
     "Score After 6 Games",
     "To Win Set 1 And Win",
-    "Not To Win A Set",
+    "Not Tgit inito Win A Set",
     "Set 1 Score Groups",
     "Score After 2 Games"
     ]
@@ -38,3 +38,4 @@ class WebCrawler(object):
         self.m_homepage = CWebsite(ODDSCHECKER_HOME, ODDSCHECKER_HOME, name="oddschecker_home")
 
     def run(self):
+        print('test') 
