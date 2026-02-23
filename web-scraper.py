@@ -1,41 +1,16 @@
-import numpy as np
-from fractions import Fraction
+"""
+Legacy entry point — superseded by main.py.
 
-from oddschecker import CWebsite
-from message import message
-import util as ut
-#from templates.HTML_template_elements import make_html
+Run the arbitrage scanner via:
+    python main.py [--amount AMOUNT] [--sports SPORT ...] [--no-api]
 
-DEFAULT_LINK_NAME = 'href'
-ODDSCHECKER_HOME = 'https://www.oddschecker.com/'
+For full usage details:
+    python main.py --help
+"""
+import sys
+import subprocess
 
-BET_AMOUNT = input('Insert your bet amount: ')
-
-INPLAY = False
-MIN_OPP = 1.05
-MAX_OPP = 1.25
-
-'''
-IGNORE = [
-    "Half Time Winning Margin",
-    "To Score 2 Or More Goals",
-    "To Score A Hat-Trick.",
-    "Last Goalscorer",
-    "To Score 3+ Goals",
-    "To Score 4+ Goals",
-    "Score After 6 Games",
-    "To Win Set 1 And Win",
-    "Not Tgit inito Win A Set",
-    "Set 1 Score Groups",
-    "Score After 2 Games"
-    ]
-'''
-
-class WebCrawler(object):
-    def __init__(self, name="Oddschecker WebCrawler"):
-        self.m_name = name
-        self.all_result = []
-        self.m_homepage = CWebsite(ODDSCHECKER_HOME, ODDSCHECKER_HOME, name="oddschecker_home")
-
-    def run(self):
-        print('test') 
+if __name__ == '__main__':
+    print("Note: web-scraper.py is deprecated. Forwarding to main.py…\n")
+    result = subprocess.run([sys.executable, 'main.py'] + sys.argv[1:])
+    sys.exit(result.returncode)
