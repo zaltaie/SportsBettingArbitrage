@@ -2,3 +2,9 @@ requests>=2.31.0
 beautifulsoup4>=4.12.0
 lxml>=4.9.0
 numpy>=1.24.0
+
+# Rich terminal dashboard (highly recommended)
+rich>=13.0.0
+
+# Desktop notifications in --notify mode (optional)
+plyer>=2.1.0

@@ -179,43 +179,12 @@ def scan_for_arbitrage(
 # ---------------------------------------------------------------------------
 
 def format_opportunity(opp: ArbitrageOpportunity) -> str:
-    """Return a human-readable string describing the opportunity."""
-    sep = '=' * 64
-    lines = [
-        '',
-        sep,
-        'ARBITRAGE OPPORTUNITY',
-        'Event  : {}'.format(opp.event_name),
-        'Sport  : {}'.format(opp.sport),
-        'Time   : {}'.format(opp.commence_time),
-        'Profit : ${:.2f}  ({:.3f}%)'.format(opp.profit, opp.profit_pct),
-        'Stake  : ${:.2f} total'.format(opp.total_stake),
-        '',
-        'Bets to place:',
-    ]
-    for outcome, entry in opp.best_offers.items():
-        stake = opp.stakes[outcome]
-        ret = opp.returns[outcome]
-        lines.append(
-            '  [{bk}] {out} @ {odds}  —  stake ${stake:.2f}  →  return ${ret:.2f}'.format(
-                bk=entry.bookmaker,
-                out=outcome,
-                odds=entry.decimal_odds,
-                stake=stake,
-                ret=ret,
-            )
-        )
-        if entry.url:
-            lines.append('    {}'.format(entry.url))
-    lines.append(sep)
-    return '\n'.join(lines)
+    """Return a step-by-step plain-text string for one opportunity."""
+    from display import format_step_instructions
+    return format_step_instructions(opp)
 
 
 def print_summary(opportunities: List[ArbitrageOpportunity]) -> None:
-    """Print all found opportunities to stdout."""
-    if not opportunities:
-        print('\nNo arbitrage opportunities found in this scan.')
-        return
-    print('\nFound {} arbitrage opportunity/ies:\n'.format(len(opportunities)))
-    for opp in opportunities:
-        print(format_opportunity(opp))
+    """Print all found opportunities using the rich dashboard (or plain fallback)."""
+    from display import print_rich_dashboard
+    print_rich_dashboard(opportunities)

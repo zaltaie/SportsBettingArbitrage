@@ -97,3 +97,8 @@ DEFAULT_HEADERS = {
 MIN_PROFIT_PCT = 0.5    # Only report opportunities above this %
 MAX_PROFIT_PCT = 20.0   # Sanity-check cap (above this is likely bad data)
 DEFAULT_BET_AMOUNT = 100.0  # Default total stake in CAD
+
+# ---------------------------------------------------------------------------
+# Watch / continuous-scan settings
+# ---------------------------------------------------------------------------
+WATCH_INTERVAL = 60     # Default seconds between scans in --watch mode
