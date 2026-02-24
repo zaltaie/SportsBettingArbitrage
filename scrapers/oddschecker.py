@@ -39,7 +39,8 @@ class OddsCheckerScraper(BaseScraper):
         super().__init__(
             name='OddsChecker',
             base_url=self.BASE_URL,
-            delay=2.0,   # Be polite — OddsChecker rate-limits aggressive scrapers
+            delay=2.0,              # Be polite — OddsChecker rate-limits aggressive scrapers
+            use_cloudscraper=True,  # OddsChecker uses Cloudflare; cloudscraper bypasses 403s
         )
 
     # ------------------------------------------------------------------

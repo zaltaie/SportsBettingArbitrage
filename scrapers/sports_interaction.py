@@ -49,6 +49,7 @@ class SportsInteractionScraper(BaseScraper):
                 'X-Brand': 'si',
             },
             delay=1.5,
+            use_cloudscraper=True,  # Sports Interaction returns 403 without Cloudflare bypass
         )
 
     # ------------------------------------------------------------------

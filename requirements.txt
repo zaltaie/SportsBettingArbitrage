@@ -6,5 +6,8 @@ numpy>=1.24.0
 # Rich terminal dashboard (highly recommended)
 rich>=13.0.0
 
+# Bypasses Cloudflare JS-challenge on sites that return 403 (OddsChecker, Bet365, SI)
+cloudscraper>=1.2.71
+
 # Desktop notifications in --notify mode (optional)
 plyer>=2.1.0

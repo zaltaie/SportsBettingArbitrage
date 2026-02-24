@@ -62,6 +62,7 @@ class Bet365Scraper(BaseScraper):
                 'Referer': _BET365_BASE + '/',
             },
             delay=3.0,
+            use_cloudscraper=True,  # Bet365 uses heavy Cloudflare protection
         )
 
     # ------------------------------------------------------------------

@@ -206,6 +206,77 @@ def _print_rich_card(opp, num: int) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Scraper health summary
+# ---------------------------------------------------------------------------
+
+def print_scraper_health(health: list) -> None:
+    """
+    Print a compact table showing which scrapers succeeded, returned 0 entries,
+    or failed with an error. Helps users understand which data sources are live.
+
+    health: list of {'name': str, 'count': int, 'error': Exception|None}
+    """
+    if not health:
+        return
+
+    if RICH_AVAILABLE:
+        table = Table(
+            title='[bold]Scraper Health[/bold]',
+            box=box.SIMPLE,
+            show_header=True,
+            header_style='bold dim',
+            min_width=52,
+        )
+        table.add_column('Source',  min_width=20)
+        table.add_column('Status',  width=10, justify='center')
+        table.add_column('Entries', width=8,  justify='right')
+        table.add_column('Note',    min_width=14)
+
+        for h in health:
+            err = h['error']
+            count = h['count']
+            if err is not None:
+                err_str = str(err)
+                if 'NameResolution' in err_str or 'resolve' in err_str.lower():
+                    note = 'DNS fail — geo-blocked?'
+                    status = '[bold red]DNS ERR[/bold red]'
+                elif 'SSL' in err_str or 'ssl' in err_str:
+                    note = 'TLS mismatch'
+                    status = '[bold red]SSL ERR[/bold red]'
+                elif '403' in err_str:
+                    note = 'Bot-blocked (403)'
+                    status = '[bold red]BLOCKED[/bold red]'
+                else:
+                    note = err_str[:30]
+                    status = '[bold red]ERROR[/bold red]'
+                count_str = '[dim]-[/dim]'
+            elif count == 0:
+                status = '[yellow]EMPTY[/yellow]'
+                note = 'No odds returned'
+                count_str = '[yellow]0[/yellow]'
+            else:
+                status = '[green]OK[/green]'
+                note = ''
+                count_str = '[green]{}[/green]'.format(count)
+
+            table.add_row(h['name'], status, count_str, note)
+
+        _console.print(table)
+    else:
+        # Plain fallback
+        print('\nScraper Health:')
+        for h in health:
+            err = h['error']
+            if err is not None:
+                print('  FAIL  {} — {}'.format(h['name'], str(err)[:60]))
+            elif h['count'] == 0:
+                print('  EMPTY {}'.format(h['name']))
+            else:
+                print('  OK    {} ({} entries)'.format(h['name'], h['count']))
+        print()
+
+
+# ---------------------------------------------------------------------------
 # Plain-text fallback
 # ---------------------------------------------------------------------------
 

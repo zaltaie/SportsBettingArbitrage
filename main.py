@@ -40,7 +40,7 @@ from typing import Set
 
 from arbitrage import OddsEntry, scan_for_arbitrage
 from config import DEFAULT_BET_AMOUNT, SPORTS, ODDS_API_KEY, WATCH_INTERVAL
-from display import print_rich_dashboard
+from display import print_rich_dashboard, print_scraper_health
 from message import message
 
 
@@ -110,13 +110,15 @@ def _run_scraper(scraper, sport_keys):
 def collect_odds_parallel(scrapers, sport_keys):
     """
     Run all scrapers concurrently in a thread pool.
-    Returns all OddsEntry objects combined.
+    Returns (all_odds, health) where health is a list of dicts:
+      [{'name': str, 'count': int, 'error': Exception|None}, ...]
 
     Using threads (not asyncio) because the scrapers use the blocking
     `requests` library. All scrapers fire at the same time — 5-10x faster
     than sequential collection.
     """
     all_odds = []
+    health = []
     with ThreadPoolExecutor(max_workers=len(scrapers)) as pool:
         futures = {
             pool.submit(_run_scraper, scraper, sport_keys): scraper.name
@@ -124,6 +126,7 @@ def collect_odds_parallel(scrapers, sport_keys):
         }
         for future in as_completed(futures):
             name, entries, error = future.result()
+            health.append({'name': name, 'count': len(entries), 'error': error})
             if error:
                 message.log_error(
                     'Scraper {} raised: {}'.format(name, error), 'main'
@@ -133,7 +136,9 @@ def collect_odds_parallel(scrapers, sport_keys):
                     '{} returned {} entries'.format(name, len(entries)), 'main'
                 )
                 all_odds.extend(entries)
-    return all_odds
+    # Sort health by name for consistent display
+    health.sort(key=lambda h: h['name'])
+    return all_odds, health
 
 
 # ---------------------------------------------------------------------------
@@ -261,12 +266,15 @@ def main():
         print('\nScanning... ({} scrapers running in parallel)'.format(len(scrapers)))
 
         start = time.time()
-        all_odds = collect_odds_parallel(scrapers, sport_keys)
+        all_odds, health = collect_odds_parallel(scrapers, sport_keys)
         elapsed = time.time() - start
 
         message.log_debug(
             'Collected {} odds entries in {:.1f}s'.format(len(all_odds), elapsed), 'main'
         )
+
+        # Always show scraper health so user knows which sources are working
+        print_scraper_health(health)
 
         if not all_odds:
             print('\nNo odds collected. Check your internet connection or try '
