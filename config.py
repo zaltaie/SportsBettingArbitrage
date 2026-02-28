@@ -17,6 +17,7 @@ ODDS_API_CANADIAN_BOOKMAKERS = [
     'betmgm',        # BetMGM Canada
     'pointsbetus',   # PointsBet Canada
     'betrivers',     # BetRivers Canada
+    'pinnacle',      # Pinnacle — sharp book, rarely limits arbers, sets market odds
 ]
 
 # ---------------------------------------------------------------------------
@@ -106,11 +107,11 @@ DEFAULT_HEADERS = {
 # ---------------------------------------------------------------------------
 # Arbitrage detection settings
 # ---------------------------------------------------------------------------
-MIN_PROFIT_PCT = 0.5    # Only report opportunities above this %
+MIN_PROFIT_PCT = 0.3    # Only report opportunities above this %
 MAX_PROFIT_PCT = 20.0   # Sanity-check cap (above this is likely bad data)
 DEFAULT_BET_AMOUNT = 100.0  # Default total stake in CAD
 
 # ---------------------------------------------------------------------------
 # Watch / continuous-scan settings
 # ---------------------------------------------------------------------------
-WATCH_INTERVAL = 60     # Default seconds between scans in --watch mode
+WATCH_INTERVAL = 30     # Default seconds between scans in --watch mode

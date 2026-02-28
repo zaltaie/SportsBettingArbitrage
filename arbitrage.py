@@ -28,9 +28,11 @@ class OddsEntry:
     event_id: str         # Unique event identifier
     event_name: str       # e.g. "Toronto Maple Leafs vs Montreal Canadiens"
     commence_time: str    # ISO-8601 string
-    outcome: str          # e.g. "Toronto Maple Leafs"
+    outcome: str          # e.g. "Toronto Maple Leafs" / "Lakers -3.5" / "Over 220.5"
     decimal_odds: float   # e.g. 1.85
     url: str = ''
+    market_type: str = 'moneyline'   # 'moneyline' | 'spread' | 'total'
+    line: Optional[float] = None     # Point spread or total line number (None for moneyline)
 
 
 @dataclass
@@ -45,6 +47,7 @@ class ArbitrageOpportunity:
     profit_pct: float
     stakes: Dict[str, float]            # outcome -> stake amount
     returns: Dict[str, float]           # outcome -> guaranteed return
+    market_type: str = 'moneyline'      # 'moneyline' | 'spread' | 'total'
 
 
 # ---------------------------------------------------------------------------
@@ -64,6 +67,7 @@ def find_arbitrage(
     commence_time: str,
     outcomes: Dict[str, List[OddsEntry]],
     total_stake: float,
+    market_type: str = 'moneyline',
 ) -> Optional[ArbitrageOpportunity]:
     """
     Check a single event for an arbitrage opportunity.
@@ -130,6 +134,7 @@ def find_arbitrage(
         profit_pct=round(profit_pct, 3),
         stakes=stakes,
         returns=returns,
+        market_type=market_type,
     )
 
 
@@ -146,17 +151,22 @@ def scan_for_arbitrage(
 
     Returns a list of ArbitrageOpportunity objects sorted by profit %.
     """
-    # Group: event_id -> outcome -> [OddsEntry]
+    # Group: composite_key -> outcome -> [OddsEntry]
+    # Key = "{event_id}:{market_type}:{abs_line}" so spread/total arbs are
+    # checked independently from moneyline, and different lines don't cross.
     event_map: Dict[str, Dict[str, List[OddsEntry]]] = {}
-    event_meta: Dict[str, tuple] = {}  # event_id -> (name, sport, time)
+    event_meta: Dict[str, tuple] = {}  # key -> (name, sport, time, market_type)
 
     for entry in all_odds:
         if entry.decimal_odds <= 1.0:
             continue
-        eid = entry.event_id
+        line_key = '{:.1f}'.format(abs(entry.line)) if entry.line is not None else ''
+        eid = '{}:{}:{}'.format(entry.event_id, entry.market_type, line_key)
         if eid not in event_map:
             event_map[eid] = {}
-            event_meta[eid] = (entry.event_name, entry.sport, entry.commence_time)
+            event_meta[eid] = (
+                entry.event_name, entry.sport, entry.commence_time, entry.market_type
+            )
         outcome_map = event_map[eid]
         if entry.outcome not in outcome_map:
             outcome_map[entry.outcome] = []
@@ -164,14 +174,60 @@ def scan_for_arbitrage(
 
     opportunities: List[ArbitrageOpportunity] = []
     for eid, outcomes in event_map.items():
-        name, sport, time = event_meta[eid]
-        opp = find_arbitrage(name, sport, time, outcomes, total_stake)
+        name, sport, time, mtype = event_meta[eid]
+        opp = find_arbitrage(name, sport, time, outcomes, total_stake, mtype)
         if opp:
             opportunities.append(opp)
             message.log_result("ARB FOUND: {} — {:.3f}%".format(name, opp.profit_pct))
 
     opportunities.sort(key=lambda o: o.profit_pct, reverse=True)
     return opportunities
+
+
+# ---------------------------------------------------------------------------
+# Kelly criterion staking
+# ---------------------------------------------------------------------------
+
+def kelly_stake(profit_pct: float, bankroll: float, fraction: float = 1.0) -> float:
+    """
+    Compute the optimal Kelly stake for a guaranteed-profit arbitrage.
+
+    For arbs the 'win probability' is 1.0, so Kelly reduces to:
+        stake = bankroll * (profit_pct / 100) * fraction
+
+    Parameters
+    ----------
+    profit_pct : float
+        The arbitrage profit percentage (e.g. 0.8 for 0.8%).
+    bankroll : float
+        Total available capital in CAD.
+    fraction : float
+        Kelly fraction — 1.0 = full Kelly, 0.5 = half-Kelly (more conservative).
+
+    Returns
+    -------
+    Optimal stake in CAD (always positive; floored at 0).
+    """
+    return max(0.0, round(bankroll * (profit_pct / 100.0) * fraction, 2))
+
+
+def rescale_opportunity(opp: ArbitrageOpportunity, new_stake: float) -> ArbitrageOpportunity:
+    """Return a copy of *opp* with all dollar amounts scaled to *new_stake*."""
+    if opp.total_stake == 0:
+        return opp
+    factor = new_stake / opp.total_stake
+    return ArbitrageOpportunity(
+        event_name=opp.event_name,
+        sport=opp.sport,
+        commence_time=opp.commence_time,
+        best_offers=opp.best_offers,
+        total_stake=round(new_stake, 2),
+        profit=round(opp.profit * factor, 2),
+        profit_pct=opp.profit_pct,
+        stakes={k: round(v * factor, 2) for k, v in opp.stakes.items()},
+        returns={k: round(v * factor, 2) for k, v in opp.returns.items()},
+        market_type=opp.market_type,
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -38,8 +38,9 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Set
 
-from arbitrage import OddsEntry, scan_for_arbitrage
+from arbitrage import OddsEntry, scan_for_arbitrage, kelly_stake, rescale_opportunity
 from config import DEFAULT_BET_AMOUNT, SPORTS, ODDS_API_KEY, WATCH_INTERVAL
+from tracker import Tracker
 from display import print_rich_dashboard, print_scraper_health
 from message import message
 
@@ -148,7 +149,7 @@ def collect_odds_parallel(scrapers, sport_keys):
 def _opp_key(opp) -> str:
     """Stable string key for an opportunity — used to detect new vs seen."""
     books = '+'.join(sorted(e.bookmaker_id for e in opp.best_offers.values()))
-    return '{}:{}:{}'.format(opp.event_name, opp.sport, books)
+    return '{}:{}:{}:{}'.format(opp.event_name, opp.sport, opp.market_type, books)
 
 
 # ---------------------------------------------------------------------------
@@ -202,6 +203,24 @@ def parse_args():
         action='store_true',
         help='Send desktop/terminal notification when a NEW opportunity is found',
     )
+    parser.add_argument(
+        '--kelly',
+        type=float,
+        default=None,
+        metavar='FRACTION',
+        help=(
+            'Kelly criterion fraction (0.0–1.0). Requires --bankroll. '
+            'Stake = bankroll × profit_pct × fraction. '
+            'Use 0.5 for half-Kelly (recommended). Overrides --amount.'
+        ),
+    )
+    parser.add_argument(
+        '--bankroll',
+        type=float,
+        default=None,
+        metavar='AMOUNT',
+        help='Total available bankroll in CAD (used with --kelly for dynamic staking)',
+    )
     return parser.parse_args()
 
 
@@ -242,10 +261,25 @@ def main():
         if sport_keys else list(SPORTS.values())
     )
 
+    # ---- Validate Kelly args ----
+    use_kelly = args.kelly is not None
+    if use_kelly and args.bankroll is None:
+        print('ERROR: --kelly requires --bankroll. Example: --kelly 0.5 --bankroll 10000')
+        sys.exit(1)
+    if use_kelly and not (0.0 < args.kelly <= 1.0):
+        print('ERROR: --kelly must be between 0.0 (exclusive) and 1.0 (inclusive).')
+        sys.exit(1)
+
     print('\n' + '=' * 64)
     print('Canadian Sports Betting Arbitrage Scanner')
-    print('Stake      : ${:.2f} CAD'.format(stake))
+    if use_kelly:
+        print('Staking    : Kelly {:.0f}%  (bankroll ${:,.2f} CAD)'.format(
+            args.kelly * 100, args.bankroll
+        ))
+    else:
+        print('Stake      : ${:.2f} CAD'.format(stake))
     print('Sports     : {}'.format(', '.join(sport_names)))
+    print('Markets    : Moneyline + Point Spreads + Totals (Over/Under)')
     print('Sources    : OddsChecker + 10 direct site scrapers' +
           (' + The Odds API' if use_api else ''))
     print('Mode       : {}'.format(
@@ -253,7 +287,11 @@ def main():
     ))
     if args.notify:
         print('Notify     : Desktop alerts ON')
+    print('Tracking   : arb_history.db  (python tracker.py --report)')
     print('=' * 64 + '\n')
+
+    # ---- Initialise tracker (always on) ----
+    tracker = Tracker()
 
     # ---- Build scrapers once (reused across watch-mode iterations) ----
     scrapers = build_scrapers(use_api)
@@ -283,12 +321,26 @@ def main():
                 sys.exit(0)
         else:
             # ---- Detect arbitrage ----
-            opportunities = scan_for_arbitrage(all_odds, stake)
+            # For Kelly mode: scan with unit stake=1.0, then rescale per opp.
+            scan_stake = 1.0 if use_kelly else stake
+            opportunities = scan_for_arbitrage(all_odds, scan_stake)
+
+            # ---- Apply Kelly sizing (per-opportunity dynamic stakes) ----
+            if use_kelly:
+                sized = []
+                for opp in opportunities:
+                    k_stake = kelly_stake(opp.profit_pct, args.bankroll, args.kelly)
+                    sized.append(rescale_opportunity(opp, k_stake))
+                opportunities = sized
 
             # ---- Identify genuinely new opportunities ----
             new_opps = [o for o in opportunities if _opp_key(o) not in seen_keys]
             for o in new_opps:
                 seen_keys.add(_opp_key(o))
+
+            # ---- Record new opportunities in the tracker ----
+            for o in new_opps:
+                tracker.record(o)
 
             # ---- Desktop / terminal notifications ----
             if args.notify and new_opps:
