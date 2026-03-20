@@ -6,7 +6,7 @@ Provides:
   - format_step_instructions() — plain-text step format (rich fallback)
 """
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List
 
 try:
@@ -32,6 +32,20 @@ SPORT_EMOJI = {
     'CFL': '\U0001f3c8',   # 🏈
 }
 
+MARKET_SHORT = {
+    'moneyline': 'ML',
+    'spread':    'Spread',
+    'total':     'O/U',
+}
+
+MARKET_LONG = {
+    'moneyline': 'Moneyline',
+    'spread':    'Point Spread',
+    'total':     'Total (Over/Under)',
+}
+
+BET_WINDOW_MINUTES = 2
+
 _console = Console() if RICH_AVAILABLE else None
 
 
@@ -43,10 +57,12 @@ def format_step_instructions(opp) -> str:
     """Return plain-text numbered step instructions for one opportunity."""
     sep = '=' * 64
     sport_icon = SPORT_EMOJI.get(opp.sport, '')
+    market_label = MARKET_LONG.get(getattr(opp, 'market_type', 'moneyline'), opp.market_type)
+    deadline = datetime.now() + timedelta(minutes=BET_WINDOW_MINUTES)
     lines = [
         '',
         sep,
-        'ARBITRAGE OPPORTUNITY  --  {} {}'.format(sport_icon, opp.sport),
+        'ARBITRAGE OPPORTUNITY  --  {} {}  [{}]'.format(sport_icon, opp.sport, market_label),
         'Event  : {}'.format(opp.event_name),
         'Time   : {}'.format(_fmt_time(opp.commence_time)),
         '',
@@ -63,9 +79,11 @@ def format_step_instructions(opp) -> str:
         lines.append('')
 
     lines += [
-        'Guaranteed profit: ${:.2f}  ({:.2f}%)'.format(opp.profit, opp.profit_pct),
+        'Guaranteed profit: ${:.2f}  ({:.3f}%)'.format(opp.profit, opp.profit_pct),
         'Total stake: ${:.2f} CAD'.format(opp.total_stake),
-        '!! Place ALL bets within 2 minutes !!',
+        '!! Place ALL bets before {} ({} min window) !!'.format(
+            deadline.strftime('%H:%M:%S'), BET_WINDOW_MINUTES
+        ),
         sep,
     ]
     return '\n'.join(lines)
@@ -129,7 +147,8 @@ def print_rich_dashboard(
     )
     table.add_column('#',        style='dim',           width=3)
     table.add_column('Sport',                           width=7)
-    table.add_column('Event',   min_width=28)
+    table.add_column('Market',                          width=8)
+    table.add_column('Event',   min_width=26)
     table.add_column('Profit',  justify='right',        width=9,  style='bold green')
     table.add_column('%',       justify='right',        width=7,  style='bold green')
     table.add_column('Books',   min_width=22)
@@ -138,13 +157,15 @@ def print_rich_dashboard(
     for i, opp in enumerate(opportunities, 1):
         books_str = ' / '.join(e.bookmaker for e in opp.best_offers.values())
         sport_str = '{} {}'.format(SPORT_EMOJI.get(opp.sport, ''), opp.sport)
+        market_str = MARKET_SHORT.get(getattr(opp, 'market_type', 'moneyline'), opp.market_type)
         pstyle = 'bold bright_green' if opp.profit_pct >= 2.0 else 'green'
         table.add_row(
             str(i),
             sport_str,
+            market_str,
             opp.event_name,
             '[{}]${:.2f}[/{}]'.format(pstyle, opp.profit, pstyle),
-            '[{}]{:.2f}%[/{}]'.format(pstyle, opp.profit_pct, pstyle),
+            '[{}]{:.3f}%[/{}]'.format(pstyle, opp.profit_pct, pstyle),
             books_str,
             _fmt_time(opp.commence_time),
         )
@@ -162,11 +183,14 @@ def print_rich_dashboard(
 def _print_rich_card(opp, num: int) -> None:
     """Render one opportunity as a rich bet-instruction card."""
     sport_icon = SPORT_EMOJI.get(opp.sport, '')
+    market_label = MARKET_LONG.get(getattr(opp, 'market_type', 'moneyline'), opp.market_type)
     pstyle = 'bright_green' if opp.profit_pct >= 2.0 else 'green'
     title = (
-        '[bold]#{} — {} {} — '
-        '[{}]${:.2f} guaranteed profit  ({:.2f}%)[/{}][/bold]'
-    ).format(num, sport_icon, opp.event_name, pstyle, opp.profit, opp.profit_pct, pstyle)
+        '[bold]#{} — {} {}  [dim][{}][/dim]  '
+        '[{}]${:.2f} guaranteed profit  ({:.3f}%)[/{}][/bold]'
+    ).format(num, sport_icon, opp.event_name, market_label, pstyle, opp.profit, opp.profit_pct, pstyle)
+
+    deadline = datetime.now() + timedelta(minutes=BET_WINDOW_MINUTES)
 
     lines = []
     for step, (outcome, entry) in enumerate(opp.best_offers.items(), 1):
@@ -191,12 +215,16 @@ def _print_rich_card(opp, num: int) -> None:
         lines.append('')
 
     lines.append(
-        '[bold {}]Guaranteed profit: ${:.2f}  ({:.2f}%)[/bold {}]'.format(
+        '[bold {}]Guaranteed profit: ${:.2f}  ({:.3f}%)[/bold {}]'.format(
             pstyle, opp.profit, opp.profit_pct, pstyle
         )
     )
     lines.append('[dim]Total stake: ${:.2f} CAD[/dim]'.format(opp.total_stake))
-    lines.append('[bold red]Place ALL bets within 2 minutes.[/bold red]')
+    lines.append(
+        '[bold red]Place ALL bets before {}  ({} min window)[/bold red]'.format(
+            deadline.strftime('%H:%M:%S'), BET_WINDOW_MINUTES
+        )
+    )
 
     border = 'bright_green' if opp.profit_pct >= 2.0 else 'yellow'
     _console.print(

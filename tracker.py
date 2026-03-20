@@ -13,6 +13,7 @@ average margin, and the book pairs generating the most arbs — useful for
 deciding where to concentrate capital.
 """
 import argparse
+import csv
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -120,6 +121,46 @@ class Tracker:
         print('=' * 72)
         print('\nDatabase: {}'.format(self.db_path))
 
+    def export_csv(self, output_path: Path = None, days: int = None) -> int:
+        """
+        Export opportunities to a CSV file.
+
+        Parameters
+        ----------
+        output_path : Path or str, optional
+            Destination file. Defaults to arb_export_YYYYMMDD.csv in the project dir.
+        days : int, optional
+            If set, only export the last *days* days. Otherwise export everything.
+
+        Returns
+        -------
+        Number of rows written.
+        """
+        if output_path is None:
+            output_path = DB_PATH.parent / 'arb_export_{}.csv'.format(
+                datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+            )
+        output_path = Path(output_path)
+
+        where = (
+            "WHERE date(timestamp, 'localtime') >= date('now', '-{} days')".format(days)
+            if days else ''
+        )
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                'SELECT * FROM opportunities {} ORDER BY timestamp'.format(where)
+            )
+            columns = [desc[0] for desc in cursor.description]
+            rows = cursor.fetchall()
+
+        with open(output_path, 'w', newline='', encoding='utf-8') as fh:
+            writer = csv.writer(fh)
+            writer.writerow(columns)
+            writer.writerows(rows)
+
+        print('Exported {} rows to {}'.format(len(rows), output_path))
+        return len(rows)
+
     def top_book_pairs(self, days: int = 7, limit: int = 10) -> None:
         """Print the book pairs generating the most arbs over the last *days* days."""
         with sqlite3.connect(self.db_path) as conn:
@@ -160,7 +201,7 @@ class Tracker:
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description='Arbitrage P&L report',
+        description='Arbitrage P&L report and CSV exporter',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -168,8 +209,12 @@ def _parse_args() -> argparse.Namespace:
                    help='Print daily P&L summary')
     p.add_argument('--pairs', action='store_true',
                    help='Print top book-pair rankings')
-    p.add_argument('--days', type=int, default=1,
-                   help='Number of days to include (default: 1)')
+    p.add_argument('--export', action='store_true',
+                   help='Export opportunities to a CSV file')
+    p.add_argument('--output', type=str, default=None, metavar='FILE',
+                   help='Output path for CSV export (default: auto-named in project dir)')
+    p.add_argument('--days', type=int, default=None,
+                   help='Number of days to include (default: all for export, 1 for report)')
     return p.parse_args()
 
 
@@ -177,11 +222,16 @@ if __name__ == '__main__':
     args = _parse_args()
     t = Tracker()
     if args.report:
-        t.daily_report(args.days)
+        t.daily_report(args.days or 1)
     elif args.pairs:
-        t.top_book_pairs(args.days)
+        t.top_book_pairs(args.days or 7)
+    elif args.export:
+        t.export_csv(output_path=args.output, days=args.days)
     else:
         print('Usage:')
-        print('  python tracker.py --report           # today\'s P&L')
-        print('  python tracker.py --report --days 7  # last 7 days')
-        print('  python tracker.py --pairs  --days 7  # top book pairs')
+        print('  python tracker.py --report              # today\'s P&L')
+        print('  python tracker.py --report --days 7     # last 7 days')
+        print('  python tracker.py --pairs  --days 7     # top book pairs')
+        print('  python tracker.py --export              # export all to CSV')
+        print('  python tracker.py --export --days 30    # export last 30 days')
+        print('  python tracker.py --export --output /tmp/arbs.csv')

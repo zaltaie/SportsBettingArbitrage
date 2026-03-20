@@ -36,8 +36,10 @@ import argparse
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Set
+from datetime import datetime
+from typing import Dict
 
+from alerter import alert
 from arbitrage import OddsEntry, scan_for_arbitrage, kelly_stake, rescale_opportunity
 from config import DEFAULT_BET_AMOUNT, SPORTS, ODDS_API_KEY, WATCH_INTERVAL
 from tracker import Tracker
@@ -221,6 +223,19 @@ def parse_args():
         metavar='AMOUNT',
         help='Total available bankroll in CAD (used with --kelly for dynamic staking)',
     )
+    parser.add_argument(
+        '--slack',
+        action='store_true',
+        help='Send Slack alert for each new opportunity (requires SLACK_WEBHOOK_URL env var)',
+    )
+    parser.add_argument(
+        '--email',
+        action='store_true',
+        help=(
+            'Send email alert for each new opportunity '
+            '(requires ALERT_EMAIL, SMTP_HOST, SMTP_USER, SMTP_PASS env vars)'
+        ),
+    )
     return parser.parse_args()
 
 
@@ -286,7 +301,11 @@ def main():
         'WATCH (every {}s)'.format(args.interval) if args.watch else 'Single scan'
     ))
     if args.notify:
-        print('Notify     : Desktop alerts ON')
+        print('Notify     : Desktop popup ON')
+    if args.slack:
+        print('Slack      : ON  (SLACK_WEBHOOK_URL)')
+    if args.email:
+        print('Email      : ON  (ALERT_EMAIL → SMTP)')
     print('Tracking   : arb_history.db  (python tracker.py --report)')
     print('=' * 64 + '\n')
 
@@ -296,7 +315,8 @@ def main():
     # ---- Build scrapers once (reused across watch-mode iterations) ----
     scrapers = build_scrapers(use_api)
 
-    seen_keys: Set[str] = set()
+    # Maps opp_key -> datetime of first discovery (for still-live reminders)
+    seen_opps: Dict[str, datetime] = {}
     scan_count = 0
 
     while True:
@@ -333,16 +353,37 @@ def main():
                     sized.append(rescale_opportunity(opp, k_stake))
                 opportunities = sized
 
+            now = datetime.now()
+
             # ---- Identify genuinely new opportunities ----
-            new_opps = [o for o in opportunities if _opp_key(o) not in seen_keys]
+            new_opps = [o for o in opportunities if _opp_key(o) not in seen_opps]
             for o in new_opps:
-                seen_keys.add(_opp_key(o))
+                seen_opps[_opp_key(o)] = now
 
             # ---- Record new opportunities in the tracker ----
             for o in new_opps:
                 tracker.record(o)
 
-            # ---- Desktop / terminal notifications ----
+            # ---- Still-live / expired reminders for previously seen opps ----
+            for o in opportunities:
+                k = _opp_key(o)
+                if k in seen_opps and k not in {_opp_key(n) for n in new_opps}:
+                    elapsed = (now - seen_opps[k]).total_seconds()
+                    remaining = 120 - elapsed
+                    if remaining > 0:
+                        print('STILL LIVE ({:.0f}s remaining): {} — {:.3f}%'.format(
+                            remaining, o.event_name, o.profit_pct
+                        ))
+                    else:
+                        print('VERIFY ODDS (>{:.0f}s old): {} — odds may have moved'.format(
+                            elapsed, o.event_name
+                        ))
+
+            # ---- Multi-channel alerts for new opps ----
+            for o in new_opps:
+                alert(o, slack=args.slack, email=args.email)
+
+            # ---- Desktop / terminal notifications (plyer) ----
             if args.notify and new_opps:
                 from notify import alert_new_opportunity
                 for o in new_opps:

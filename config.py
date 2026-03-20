@@ -112,6 +112,17 @@ MAX_PROFIT_PCT = 20.0   # Sanity-check cap (above this is likely bad data)
 DEFAULT_BET_AMOUNT = 100.0  # Default total stake in CAD
 
 # ---------------------------------------------------------------------------
+# Alert channels  (Slack webhook + email SMTP)
+# Set these via environment variables — never hard-code credentials.
+# ---------------------------------------------------------------------------
+SLACK_WEBHOOK_URL = os.environ.get('SLACK_WEBHOOK_URL', '')
+ALERT_EMAIL       = os.environ.get('ALERT_EMAIL', '')       # comma-separated addresses
+SMTP_HOST         = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
+SMTP_PORT         = int(os.environ.get('SMTP_PORT', '587'))
+SMTP_USER         = os.environ.get('SMTP_USER', '')
+SMTP_PASS         = os.environ.get('SMTP_PASS', '')
+
+# ---------------------------------------------------------------------------
 # Watch / continuous-scan settings
 # ---------------------------------------------------------------------------
 WATCH_INTERVAL = 30     # Default seconds between scans in --watch mode

@@ -111,6 +111,8 @@ You will be prompted for your total stake in CAD (default: $100).
 ## All usage examples
 
 ```bash
+# ---- Basic scans ----
+
 # Single scan — prompt for stake
 python main.py
 
@@ -126,26 +128,43 @@ python main.py --sports icehockey_nhl basketball_nba
 # Only show opportunities above 0.5% profit
 python main.py --min-profit 0.5
 
-# Continuous watch mode — re-scan every 30 seconds (new default)
+# ---- Continuous watch mode ----
+
+# Re-scan every 30 seconds (default)
 python main.py --watch
 
-# Watch mode with a custom interval (15 seconds)
+# Custom interval (15 seconds)
 python main.py --watch --interval 15
 
-# Watch mode + desktop notification on every new opportunity
+# Desktop popup on every new opportunity
 python main.py --watch --notify
 
-# Kelly criterion staking — stake = bankroll × profit% × fraction
+# ---- Kelly criterion staking ----
+
 # Half-Kelly on a $10,000 bankroll (recommended starting point)
 python main.py --kelly 0.5 --bankroll 10000 --watch
 
 # Full Kelly on a $50,000 bankroll (aggressive)
 python main.py --kelly 1.0 --bankroll 50000 --watch
 
-# All options combined
-python main.py --amount 500 --watch --interval 20 --notify --sports icehockey_nhl basketball_nba
+# ---- Alert channels ----
 
-# ---- P&L reporting (tracker.py) ----
+# Slack alert on every new opportunity
+export SLACK_WEBHOOK_URL=https://hooks.slack.com/services/XXX/YYY/ZZZ
+python main.py --watch --slack
+
+# Email alert on every new opportunity
+export ALERT_EMAIL=ops@hospital.ca
+export SMTP_HOST=smtp.gmail.com
+export SMTP_PORT=587
+export SMTP_USER=alerts@hospital.ca
+export SMTP_PASS=your-app-password
+python main.py --watch --email
+
+# All alert channels at once (recommended production config)
+python main.py --watch --slack --email --notify --kelly 0.5 --bankroll 50000
+
+# ---- P&L reporting and export ----
 
 # Today's profit summary
 python tracker.py --report
@@ -158,6 +177,12 @@ python tracker.py --report --days 30
 
 # Top book pairs by profit over the last 7 days
 python tracker.py --pairs --days 7
+
+# Export everything to CSV (timestamped filename)
+python tracker.py --export
+
+# Export last 30 days to a specific file
+python tracker.py --export --days 30 --output /tmp/arbs_march.csv
 ```
 
 ---
@@ -172,9 +197,11 @@ python tracker.py --pairs --days 7
 | `--min-profit` | | 0.3 | Minimum profit % to report |
 | `--watch` | `-w` | off | Continuous scan mode |
 | `--interval` | `-i` | 30 | Seconds between scans (watch mode) |
-| `--notify` | `-n` | off | Desktop alert on new opportunities |
+| `--notify` | `-n` | off | Desktop popup alert on new opportunities |
 | `--kelly` | | off | Kelly fraction 0.0–1.0 (requires `--bankroll`) |
 | `--bankroll` | | — | Total bankroll in CAD (used with `--kelly`) |
+| `--slack` | | off | Slack webhook alert on new opportunities |
+| `--email` | | off | Email (SMTP) alert on new opportunities |
 
 **Valid sport keys** for `--sports`:
 
@@ -205,11 +232,19 @@ python tracker.py --pairs --days 7
 5. **Kelly criterion** (optional) — with `--kelly`, each opportunity's stake is
    computed dynamically: `stake = bankroll × profit_pct × kelly_fraction`,
    growing the bankroll faster than flat staking during productive periods.
-6. **Opportunity tracker** — every new arb is logged to `arb_history.db`;
+6. **Bet deadline display** — every bet card shows a hard deadline clock
+   (`Place ALL bets before HH:MM:SS`) calculated 2 minutes from discovery.
+7. **Still-live reminders** — in `--watch` mode, if an opportunity persists
+   across scans, the scanner prints `STILL LIVE (Xs remaining)` so you know
+   it's still actionable, or `VERIFY ODDS` once the 2-minute window has passed.
+8. **Multi-channel alerts** — when a new arb is found:
+   - Slack (`--slack`): rich Block Kit message with steps and deadline
+   - Email (`--email`): plain-text SMTP email readable on any device
+   - Desktop popup (`--notify`): system notification via plyer
+9. **Opportunity tracker** — every new arb is logged to `arb_history.db`;
    use `python tracker.py --report` to see daily P&L and top book pairs.
-7. **New-opportunity alerts** — in `--watch` mode the scanner tracks which
-   opportunities have already been shown; only genuinely new ones trigger a
-   notification.
+10. **CSV export** — `python tracker.py --export` dumps all logged opportunities
+    to a timestamped CSV for reconciliation and accounting.
 
 ### Arbitrage formula
 
@@ -239,6 +274,67 @@ Use `kelly_fraction = 0.5` (half-Kelly) to balance growth against variance.
 
 The Odds API covers: DraftKings, FanDuel, BetMGM, PointsBet, BetRivers, Pinnacle.
 All three markets (h2h, spreads, totals) are fetched in a single API call.
+
+---
+
+## Alert channel setup
+
+### Slack (recommended)
+
+1. Go to <https://api.slack.com/apps> → Create New App → From scratch
+2. Enable **Incoming Webhooks** → Add to Workspace → Copy the webhook URL
+3. Set the environment variable:
+
+```bash
+export SLACK_WEBHOOK_URL=https://hooks.slack.com/services/T.../B.../xxx
+```
+
+4. Run with `--slack`:
+```bash
+python main.py --watch --slack
+```
+
+Each new opportunity sends a rich Slack message with the full step-by-step
+instructions, profit amount, deadline clock, and tap-to-open book links.
+
+---
+
+### Email (SMTP)
+
+Works with Gmail (App Password), Outlook, or any SMTP server.
+
+**Gmail setup:**
+1. Enable 2-Step Verification on the sending account
+2. Generate an App Password at <https://myaccount.google.com/apppasswords>
+3. Set environment variables:
+
+```bash
+export ALERT_EMAIL=ops@hospital.ca,admin@hospital.ca
+export SMTP_HOST=smtp.gmail.com
+export SMTP_PORT=587
+export SMTP_USER=alerts@hospital.ca
+export SMTP_PASS=xxxx-xxxx-xxxx-xxxx   # 16-char app password
+```
+
+4. Run with `--email`:
+```bash
+python main.py --watch --email
+```
+
+---
+
+### CSV accounting export
+
+```bash
+# Export all logged opportunities to a timestamped CSV
+python tracker.py --export
+
+# Export only the last 30 days
+python tracker.py --export --days 30 --output march_2026_arbs.csv
+```
+
+The CSV contains: `id, timestamp, event_name, sport, market_type, books,
+profit_pct, stake, profit_cad` — ready for Excel, Google Sheets, or accounting software.
 
 ---
 
@@ -272,10 +368,11 @@ python tracker.py --pairs --days 7
 SportsBettingArbitrage/
 ├── main.py             Entry point — CLI, parallel collection, watch loop
 ├── arbitrage.py        Arbitrage math, data classes, Kelly staking
-├── tracker.py          SQLite P&L tracker and daily report CLI
+├── alerter.py          Slack webhook + email (SMTP) + bet deadline alerts
+├── tracker.py          SQLite P&L tracker, daily report CLI, CSV export
 ├── display.py          Rich TUI dashboard and step-by-step bet cards
-├── notify.py           Desktop/terminal notifications
-├── config.py           Global settings (thresholds, URLs, intervals)
+├── notify.py           Desktop/terminal notifications (plyer)
+├── config.py           Global settings (thresholds, URLs, intervals, alert config)
 ├── message.py          Logging helper (stdout + log.txt)
 ├── requirements.txt    Python dependencies
 ├── arb_history.db      Auto-created SQLite database (git-ignored)
@@ -331,6 +428,10 @@ SportsBettingArbitrage/
 | Desktop notifications not working | `pip install plyer` |
 | Scrapers return errors | Some sites geo-block non-Canadian IPs; use a CA VPN |
 | No spread/total arbs found | These come only via The Odds API — ensure `ODDS_API_KEY` is set |
+| Slack alert not sent | Check `SLACK_WEBHOOK_URL` is set; verify webhook is still active |
+| Email not sent | Check all `SMTP_*` vars; for Gmail use an App Password, not your login password |
+| "Email skipped: SMTP_USER not configured" | Set `SMTP_USER` and `SMTP_PASS` environment variables |
+| CSV export empty | Run the scanner first to populate `arb_history.db` |
 
 ---
 
