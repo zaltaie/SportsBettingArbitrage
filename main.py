@@ -365,19 +365,27 @@ def main():
                 tracker.record(o)
 
             # ---- Still-live / expired reminders for previously seen opps ----
+            new_opp_keys = {_opp_key(n) for n in new_opps}
             for o in opportunities:
                 k = _opp_key(o)
-                if k in seen_opps and k not in {_opp_key(n) for n in new_opps}:
-                    elapsed = (now - seen_opps[k]).total_seconds()
-                    remaining = 120 - elapsed
+                if k in seen_opps and k not in new_opp_keys:
+                    age = (now - seen_opps[k]).total_seconds()
+                    remaining = 120 - age
                     if remaining > 0:
                         print('STILL LIVE ({:.0f}s remaining): {} — {:.3f}%'.format(
                             remaining, o.event_name, o.profit_pct
                         ))
                     else:
                         print('VERIFY ODDS (>{:.0f}s old): {} — odds may have moved'.format(
-                            elapsed, o.event_name
+                            age, o.event_name
                         ))
+
+            # ---- Purge stale entries no longer appearing in current scan ----
+            current_keys = {_opp_key(o) for o in opportunities}
+            stale = [k for k in seen_opps if k not in current_keys
+                     and (now - seen_opps[k]).total_seconds() > 300]
+            for k in stale:
+                del seen_opps[k]
 
             # ---- Multi-channel alerts for new opps ----
             for o in new_opps:

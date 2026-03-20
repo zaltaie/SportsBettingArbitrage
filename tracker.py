@@ -142,14 +142,18 @@ class Tracker:
             )
         output_path = Path(output_path)
 
-        where = (
-            "WHERE date(timestamp, 'localtime') >= date('now', '-{} days')".format(days)
-            if days else ''
-        )
         with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute(
-                'SELECT * FROM opportunities {} ORDER BY timestamp'.format(where)
-            )
+            if days is not None:
+                cursor = conn.execute(
+                    "SELECT * FROM opportunities "
+                    "WHERE date(timestamp, 'localtime') >= date('now', ? || ' days') "
+                    "ORDER BY timestamp",
+                    ('-{}'.format(int(days)),),
+                )
+            else:
+                cursor = conn.execute(
+                    'SELECT * FROM opportunities ORDER BY timestamp'
+                )
             columns = [desc[0] for desc in cursor.description]
             rows = cursor.fetchall()
 
